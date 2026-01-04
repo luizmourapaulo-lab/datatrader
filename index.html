@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>DataTrade Pro - Painel de Estratégias</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0b0e14; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        .glass-card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; transition: transform 0.2s; }
+        .glass-card:hover { transform: translateY(-2px); border-color: #10b981; }
+        .candle { width: 22px; height: 45px; border-radius: 3px; }
+        .candle-VERDE { background-color: #10b981; box-shadow: 0 0 8px #10b98144; }
+        .candle-VERMELHA { background-color: #ef4444; box-shadow: 0 0 8px #ef444444; }
+        .candle-DOJI { background-color: #94a3b8; width: 22px; height: 2px; margin: 21px 0; }
+        .tab-btn { transition: all 0.3s; border-bottom: 2px solid transparent; }
+        .tab-btn.active { border-bottom-color: #10b981; color: #10b981; background: #10b98111; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="login-screen" class="max-w-md mx-auto mt-20 p-8 glass-card">
+        <h2 class="text-3xl font-black text-emerald-500 text-center mb-8 tracking-tighter">DATA<span class="text-white">TRADE</span></h2>
+        <input type="email" id="email" placeholder="E-mail IQ Option" class="w-full bg-slate-900 border border-slate-700 rounded p-3 mb-4 text-white outline-none focus:border-emerald-500">
+        <input type="password" id="password" placeholder="Senha" class="w-full bg-slate-900 border border-slate-700 rounded p-3 mb-6 text-white outline-none focus:border-emerald-500">
+        <button onclick="fazerLogin()" id="btn-login" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded font-bold transition uppercase">Conectar</button>
+        <p id="login-msg" class="text-red-400 text-center mt-4 text-sm"></p>
+    </div>
+
+    <div id="dashboard" class="max-w-7xl mx-auto hidden">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 border-b border-slate-800 pb-6">
+            <div>
+                <h1 class="text-3xl font-black text-emerald-500 tracking-tighter">DATA<span class="text-white">TRADE</span></h1>
+                <p id="update-time" class="text-slate-500 text-xs font-mono">Aguardando sinais...</p>
+            </div>
+            
+            <nav id="strategy-tabs" class="flex gap-2 overflow-x-auto pb-2 w-full md:w-auto scrollbar-hide">
+                <button onclick="mudarEstrategia('MHI 1')" class="tab-btn active px-4 py-2 text-xs font-bold whitespace-nowrap uppercase">MHI 1</button>
+                <button onclick="mudarEstrategia('MHI 2')" class="tab-btn px-4 py-2 text-xs font-bold whitespace-nowrap uppercase">MHI 2</button>
+                <button onclick="mudarEstrategia('MHI 3')" class="tab-btn px-4 py-2 text-xs font-bold whitespace-nowrap uppercase">MHI 3</button>
+                <button onclick="mudarEstrategia('R7')" class="tab-btn px-4 py-2 text-xs font-bold whitespace-nowrap uppercase">R7</button>
+                <button onclick="mudarEstrategia('Torres Gemeas')" class="tab-btn px-4 py-2 text-xs font-bold whitespace-nowrap uppercase">Torres</button>
+                <button onclick="mudarEstrategia('Padrao 3x1')" class="tab-btn px-4 py-2 text-xs font-bold whitespace-nowrap uppercase">3x1</button>
+                <button onclick="mudarEstrategia('Padrao 23')" class="tab-btn px-4 py-2 text-xs font-bold whitespace-nowrap uppercase">P. 23</button>
+                <button onclick="mudarEstrategia('Tres Mosqueteiros')" class="tab-btn px-4 py-2 text-xs font-bold whitespace-nowrap uppercase">Mosqueteiros</button>
+                <button onclick="mudarEstrategia('Melhor de 3')" class="tab-btn px-4 py-2 text-xs font-bold whitespace-nowrap uppercase">Melhor 3</button>
+                <button onclick="mudarEstrategia('Seven Flip')" class="tab-btn px-4 py-2 text-xs font-bold whitespace-nowrap uppercase">Seven Flip</button>
+            </nav>
+        </header>
+
+        <div id="cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+    </div>
+
+    <script>
+        let estrategiaAtual = "MHI 1";
+        let todosDados = [];
+
+        async function fazerLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('btn-login');
+            btn.innerText = "AUTENTICANDO...";
+            
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email, password})
+            });
+            const data = await res.json();
+            if (data.status === "success") {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                setInterval(atualizar, 10000);
+                atualizar();
+            } else {
+                document.getElementById('login-msg').innerText = "Falha ao conectar na IQ Option.";
+                btn.innerText = "CONECTAR";
+            }
+        }
+
+        function mudarEstrategia(nome) {
+            estrategiaAtual = nome;
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.innerText === nome.toUpperCase() || btn.innerText === nome.replace('Padrao ', 'P. ').replace('Gemeas', '').toUpperCase() || btn.innerText === 'TORRES');
+                if(btn.onclick.toString().includes(`'${nome}'`)) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+            renderizarCards();
+        }
+
+        async function atualizar() {
+            const res = await fetch('/api/dados');
+            const data = await res.json();
+            todosDados = data.dados || [];
+            if(data.ultima_atualizacao) document.getElementById('update-time').innerText = `ÚLTIMA ATUALIZAÇÃO: ${data.ultima_atualizacao}`;
+            renderizarCards();
+        }
+
+        function renderizarCards() {
+            const container = document.getElementById('cards-container');
+            container.innerHTML = '';
+            
+            const filtrados = todosDados.filter(d => d.estrategia === estrategiaAtual);
+            
+            if(filtrados.length === 0) {
+                container.innerHTML = '<div class="col-span-full text-center p-20 text-slate-600">Nenhum sinal encontrado para esta estratégia no momento.</div>';
+                return;
+            }
+
+            filtrados.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'glass-card p-6 flex flex-col gap-5';
+                
+                let velasHtml = item.padrao.map(cor => `<div class="candle candle-${cor}"></div>`).join('');
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="text-xl font-bold text-white">${item.par}</span>
+                            <p class="text-[10px] text-emerald-500 font-black tracking-widest uppercase mt-1">${item.estrategia}</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-3xl font-black ${item.assertividade >= 90 ? 'text-emerald-400' : 'text-yellow-400'}">${item.assertividade}%</span>
+                            <p class="text-[10px] text-slate-500 uppercase font-bold">${item.gales.v0 + item.gales.v1 + item.gales.v2 + item.gales.loss} SINAIS</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-900/80 p-5 rounded-lg flex items-center justify-between border border-slate-800/50">
+                        <div class="flex gap-2">${velasHtml}</div>
+                        <div class="flex flex-col items-center pl-4 border-l border-slate-800">
+                            <span class="text-[9px] text-slate-500 uppercase font-black mb-1">Entrada</span>
+                            <span class="px-4 py-1 rounded font-black text-sm ${item.direcao === 'CALL' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}">${item.direcao}</span>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-2 text-[10px] text-center font-bold">
+                        <div class="bg-emerald-500/5 p-2 rounded border border-emerald-500/10 text-emerald-500/80">WIN: ${item.gales.v0}</div>
+                        <div class="bg-blue-500/5 p-2 rounded border border-blue-500/10 text-blue-400/80">G1: ${item.gales.v1}</div>
+                        <div class="bg-purple-500/5 p-2 rounded border border-purple-500/10 text-purple-400/80">G2: ${item.gales.v2}</div>
+                        <div class="bg-red-500/5 p-2 rounded border border-red-500/10 text-red-400/80">LOSS: ${item.gales.loss}</div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>
